@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fake Bank</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #0b1a2a;
+  color: white;
+  margin: 0;
+}
+header {
+  background: #122c44;
+  padding: 12px 20px;
+  font-size: 18px;
+}
+.container {
+  padding: 20px;
+}
+input, button {
+  padding: 6px;
+  margin: 4px 0;
+}
+button {
+  cursor: pointer;
+}
+.panel {
+  background: #163a5f;
+  padding: 15px;
+  border-radius: 10px;
+  margin-top: 15px;
+}
+.banned {
+  color: red;
+  font-weight: bold;
+}
+table {
+  width: 100%;
+  background: #0f2b46;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+th, td {
+  border: 1px solid #234;
+  padding: 6px;
+}
+th {
+  background: #1c4a75;
+}
+</style>
+</head>
+<body>
+
+<header>Fake Bank</header>
+
+<div class="container">
+
+<!-- LOGIN -->
+<div class="panel" id="loginPanel">
+  <h3>Login</h3>
+  <input id="loginName" placeholder="Username">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- BANK -->
+<div class="panel" id="bankPanel" style="display:none">
+  <h3>Account: <span id="userName"></span></h3>
+  <p>Balance: £<span id="balance"></span></p>
+  <p id="banStatus"></p>
+
+  <h4>Link PlayFab Account</h4>
+  <input id="linkCode" placeholder="6-digit link code">
+  <button onclick="linkAccount()">Link</button>
+
+  <h4>Send Money</h4>
+  <input id="toUser" placeholder="To user">
+  <input id="amount" type="number" placeholder="Amount">
+  <button onclick="sendMoney()">Send</button>
+
+  <h4>Transaction History</h4>
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody id="txTable"></tbody>
+  </table>
+</div>
+
+</div>
+
+<script>
+/* ===== SHARED STORAGE ===== */
+const USERS_KEY = "pf_users";
+const LINKS_KEY = "pf_links";
+
+/* ===== STATE ===== */
+let currentUser = null;
+
+/* ===== HELPERS ===== */
+function loadUsers() {
+  return JSON.parse(localStorage.getItem(USERS_KEY) || "{}");
+}
+function saveUsers(u) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(u));
+}
+
+/* ===== LOGIN ===== */
+function login() {
+  const name = loginName.value.trim();
+  if (!name) return alert("Enter username");
+
+  const users = loadUsers();
+  if (!users[name]) {
+    users[name] = {
+      balance: 0,
+      banned: false,
+      transactions: []
+    };
+    saveUsers(users);
+  }
+
+  currentUser = name;
+  loginPanel.style.display = "none";
+  bankPanel.style.display = "block";
+  render();
+}
+
+/* ===== LINK PLAYFAB ===== */
+function linkAccount() {
+  const code = linkCode.value.trim();
+  if (!code) return alert("Enter code");
+
+  const links = JSON.parse(localStorage.getItem(LINKS_KEY) || "{}");
+  const users = loadUsers();
+
+  if (!links[code]) return alert("Invalid code");
+  if (links[code].used) return alert("Code already used");
+
+  const pfPlayer = links[code].player;
+  if (!users[pfPlayer]) return alert("PlayFab player not found");
+
+  users[currentUser] = users[pfPlayer];
+  links[code].used = true;
+
+  saveUsers(users);
+  localStorage.setItem(LINKS_KEY, JSON.stringify(links));
+
+  alert("Linked successfully");
+  render();
+}
+
+/* ===== SEND MONEY ===== */
+function sendMoney() {
+  const to = toUser.value.trim();
+  const amt = Number(amount.value);
+  if (!to || amt <= 0) return alert("Invalid input");
+
+  const users = loadUsers();
+  const fromUser = users[currentUser];
+
+  if (fromUser.banned) return alert("You are banned");
+  if (!users[to]) return alert("User not found");
+  if (fromUser.balance < amt) return alert("Not enough money");
+
+  fromUser.balance -= amt;
+  users[to].balance += amt;
+
+  fromUser.transactions.push({ type: "Send", from: currentUser, to, amt });
+  users[to].transactions.push({ type: "Receive", from: currentUser, to, amt });
+
+  saveUsers(users);
+  render();
+}
+
+/* ===== RENDER ===== */
+function render() {
+  const users = loadUsers();
+  const u = users[currentUser];
+
+  userName.textContent = currentUser;
+  balance.textContent = u.balance;
+  banStatus.textContent = u.banned ? "BANNED" : "Active";
+  banStatus.className = u.banned ? "banned" : "";
+
+  txTable.innerHTML = "";
+  u.transactions.forEach(t => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${t.type}</td>
+      <td>${t.from}</td>
+      <td>${t.to}</td>
+      <td>£${t.amt}</td>
+    `;
+    txTable.appendChild(tr);
+  });
+}
+</script>
+
+</body>
+</html>
